@@ -23,7 +23,7 @@ class cww_MorseTx {
   public:
     cww_MorseTx(byte keypin, float speed, bool invert = false);
     cww_MorseTx(byte keypin, float speed, byte sndpin, int freq = 1000, bool invert = false);
-    void send(char c);
+    char send(char c);
     void send(const char* str);
   private:
     void dot();

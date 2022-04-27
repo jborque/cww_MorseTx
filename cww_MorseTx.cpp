@@ -3,14 +3,15 @@
 #include "cww_MorseTx.h"
 
 /*
-version 1.2.1: Ignore all non-Morse characters 
+version 1.2.2: Added spanish special characters and prosings between <>
+version 1.2.1: Ignore all non-Morse characters
 version 1.2.0: Change speed to float type to support speeds less than 1 word per minute
 version 1.1.1: Isolate variables to support multiple instances. Fix divide by zero error when speed = 0
 version 1.1.0: ESP32 support. Fixed compiler warning about a constant to char* conversion.
 version 1.0.0: Initial release
 */
 
-const byte _morsetable[] = { 
+const byte _morsetable[] = {
   B01110101, // !
   B01010010, // "
   B00000001, // # (no Morse character)
@@ -75,6 +76,12 @@ const byte _morsetable[] = {
   B00000001, // ^ (no Morse character)
   B01101100, // _
   B01011110, // `
+  B00111011, // Ñ 209 241
+  B00110110, // Á 193 225
+  B00100100, // É 201 233
+  B00000100, // Í 205 237
+  B00010111, // Ó 211 243
+  B00011100, // Ú 218 250 220 252
 };
 
 cww_MorseTx::cww_MorseTx(byte keypin, float speed, bool invert) {
@@ -100,9 +107,9 @@ cww_MorseTx::cww_MorseTx(byte keypin, float speed, byte sndpin, int freq, bool i
 
 void cww_MorseTx::dot() {
   if (_sndpin !=  0) {
-    tone(_sndpin, _freq);	  
+    tone(_sndpin, _freq);
   }
-  
+
   digitalWrite(_keypin, _invert ? LOW : HIGH);
   delay(_dotlen);
   digitalWrite(_keypin, _invert ? HIGH : LOW);
@@ -110,15 +117,15 @@ void cww_MorseTx::dot() {
   if (_sndpin != 0) {
     noTone(_sndpin);
   }
-  
+
   delay(_dotlen);
 }
 
 void cww_MorseTx::dash() {
   if (_sndpin !=  0) {
-    tone(_sndpin, _freq);	  
+    tone(_sndpin, _freq);
   }
-  
+
   digitalWrite(_keypin, _invert ? LOW : HIGH);
   delay(_dashlen);
   digitalWrite(_keypin, _invert ? HIGH : LOW);
@@ -126,27 +133,53 @@ void cww_MorseTx::dash() {
   if (_sndpin != 0) {
     noTone(_sndpin);
   }
-  
+
   delay(_dotlen);
 }
 
-void cww_MorseTx::send(char c) {
+char cww_MorseTx::send(char c) {
+  static bool prosign=false;
   byte o;
   byte morseByte;
-  byte offset = (byte)c < 97 ? 0 : 32;
+  byte offset = 0;
 
   // Send space
   if (c == ' ') {
     delay(7 * _dotlen);
-    return;
+    return(' ');
   }
 
-  // Ignore offsets (non-Morse) characters
-  o = ((byte) c) - 33 - offset;
-  if (o > 63) {
-      o = 2; // a non-Morse character
+  // Toggle prosign
+  if (c == '<' || c == '>' ) {
+    prosign=!prosign;
+    return(c);
   }
-  
+
+  if ( c >= 97 && c <= 122 || c >= 224 ) c -= 32; // Lowercase to uppercase;
+
+
+  if (((byte) c) < 33) c = '#'; // Replace charcters under ASCII 33 with #
+  o = ((byte) c) - 33;
+
+  switch ( (byte)c ) { // Process special characters
+    case 209: // Ñ
+      offset += 112;  break;
+    case 193: // Á
+      offset += 96;  break;
+    case 201: // É
+      offset += 104;  break;
+    case 205: // Í
+      offset += 108;  break;
+    case 211: // Ó
+      offset += 114;  break;
+    case 218: // Ú
+    case 220: // Ü
+      offset += 121;  break;
+  }
+
+  o -= offset;
+  if ( o  > 70 ) o = 2;   //If still above last char discard with "#";
+
   // Take the ASCII and retrieve the equivalent Morse character
   morseByte = _morsetable[o];
 
@@ -160,9 +193,13 @@ void cww_MorseTx::send(char c) {
     // Rotate to next bit
     morseByte = morseByte / 2;
   }
-  
-  // Inter-letter space
-  delay(2 * _dotlen);
+
+  // Inter-letter space if not prosign
+  if(!prosign) delay(2 * _dotlen);
+
+  // Return what was sent in ASCII, # means nothing was sent
+  return( o + 33 + offset );
+
 }
 
 void cww_MorseTx::send(const char* str) {
